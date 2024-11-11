@@ -6,6 +6,27 @@
 #include <iostream>
 #include <random>
 
+#ifdef BASELINE
+template <typename fty>
+__attribute__((nothrow)) fty *__enzyme_truncate_mem_func(fty *, int, int, int);
+template <typename fty>
+__attribute__((nothrow)) fty *__enzyme_truncate_op_func(fty *, int, int, int);
+__attribute__((nothrow)) extern double __enzyme_truncate_mem_value(...);
+__attribute__((nothrow)) extern double __enzyme_expand_mem_value(...);
+#define ENZYME_TRUNC_FROM 64
+#define ENZYME_TRUNC_TO_E 64
+#define ENZYME_TRUNC_TO_M 256
+
+#define TRUNCATE_SELF(X)                                                       \
+  X = __enzyme_truncate_mem_value(X, ENZYME_TRUNC_FROM, ENZYME_TRUNC_TO_E,     \
+                                  ENZYME_TRUNC_TO_M)
+#define EXPAND(X)                                                              \
+  __enzyme_expand_mem_value(X, ENZYME_TRUNC_FROM, ENZYME_TRUNC_TO_E,           \
+                            ENZYME_TRUNC_TO_M)
+#define EXPAND_SELF(X) X = EXPAND(X)
+#define MARK_SEEN(X) X = enzyme_fprt_gc_mark_seen(X)
+#endif
+
 #ifdef LOGGED
 #include "fp-logger.hpp"
 
@@ -122,6 +143,29 @@ struct Eigensystem {
   vec3 lambda;
   mat3 X;
 };
+
+#ifdef BASELINE
+void convertToMPFR(vec3 &V) {
+  for (int i = 0; i < 3; ++i)
+    TRUNCATE_SELF(V[i]);
+}
+void convertFromMPFR(vec3 &V) {
+  for (int i = 0; i < 3; ++i)
+    EXPAND_SELF(V[i]);
+}
+void convertToMPFR(mat3 &A) {
+  for (int i = 0; i < 3; ++i)
+    convertToMPFR(A[i]);
+}
+void convertFromMPFR(mat3 &A) {
+  for (int i = 0; i < 3; ++i)
+    convertFromMPFR(A[i]);
+}
+void convertFromMPFR(Eigensystem &E) {
+  convertFromMPFR(E.lambda);
+  convertFromMPFR(E.X);
+}
+#endif
 
 // eigendecomposition for **symmetric** A
 //
@@ -299,7 +343,12 @@ int main(int argc, char *argv[]) {
       }
 
     Eigensystem res;
-#ifdef LOGGED
+#if defined(BASELINE)
+    convertToMPFR(A);
+    __enzyme_truncate_mem_func(eig, ENZYME_TRUNC_FROM, ENZYME_TRUNC_TO_E,
+                               ENZYME_TRUNC_TO_M)(A, res);
+    convertFromMPFR(res);
+#elif defined(LOGGED)
     mat3 A_grad;
     for (int i = 0; i < 3; ++i)
       for (int j = 0; j < 3; ++j)
