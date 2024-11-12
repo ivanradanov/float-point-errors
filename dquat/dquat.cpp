@@ -7,6 +7,27 @@
 #include <limits>
 #include <random>
 
+#ifdef BASELINE
+template <typename fty>
+__attribute__((nothrow)) fty *__enzyme_truncate_mem_func(fty *, int, int, int);
+template <typename fty>
+__attribute__((nothrow)) fty *__enzyme_truncate_op_func(fty *, int, int, int);
+__attribute__((nothrow)) extern double __enzyme_truncate_mem_value(...);
+__attribute__((nothrow)) extern double __enzyme_expand_mem_value(...);
+#define ENZYME_TRUNC_FROM 64
+#define ENZYME_TRUNC_TO_E 64
+#define ENZYME_TRUNC_TO_M 256
+
+#define TRUNCATE_SELF(X)                                                       \
+  X = __enzyme_truncate_mem_value(X, ENZYME_TRUNC_FROM, ENZYME_TRUNC_TO_E,     \
+                                  ENZYME_TRUNC_TO_M)
+#define EXPAND(X)                                                              \
+  __enzyme_expand_mem_value(X, ENZYME_TRUNC_FROM, ENZYME_TRUNC_TO_E,           \
+                            ENZYME_TRUNC_TO_M)
+#define EXPAND_SELF(X) X = EXPAND(X)
+#define MARK_SEEN(X) X = enzyme_fprt_gc_mark_seen(X)
+#endif
+
 #ifdef LOGGED
 #include "fp-logger.hpp"
 
@@ -244,7 +265,16 @@ int main(int argc, char *argv[]) {
     // #endif
 
     double dquat_dexpmap_t[emapdim * qdim] = {};
-#ifdef LOGGED
+#if defined(BASELINE)
+    for (size_t i = 0; i < emapdim; i++) {
+      TRUNCATE_SELF(emap[i]);
+    }
+    __enzyme_truncate_mem_func(dquat_demap_T, ENZYME_TRUNC_FROM, ENZYME_TRUNC_TO_E,
+                               ENZYME_TRUNC_TO_M)(dquat_dexpmap_t, emap);
+    for (size_t i = 0; i < emapdim * qdim; i++) {
+      EXPAND_SELF(dquat_dexpmap_t[i]);
+    }
+#elif defined(LOGGED)
     double dquat_dexpmap_t_grad[emapdim * qdim];
     std::fill(dquat_dexpmap_t_grad, dquat_dexpmap_t_grad + emapdim * qdim, 1.0);
     double emap_grad[emapdim];
